@@ -10,6 +10,8 @@ export type BookmarkItemData = {
   url: string;
   title: string | null;
   description: string | null;
+  summary: string | null;
+  tags: string[];
   status: "pending" | "done" | "failed";
   errorMessage: string | null;
   collecting: boolean;
@@ -23,6 +25,8 @@ export function BookmarkItem({ bookmark }: { bookmark: BookmarkItemData }) {
   const [retryState, retryAction, retryPending] = useActionState(retryCollectionAction, initialActionState);
 
   const errorMessage = [editState, deleteState, retryState].find((state) => state.status === "error")?.message;
+  // AI 요약이 있으면 우선하고, 없으면 페이지의 meta 설명을 보여준다.
+  const summaryText = bookmark.summary ?? bookmark.description;
 
   return (
     <li className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
@@ -37,11 +41,20 @@ export function BookmarkItem({ bookmark }: { bookmark: BookmarkItemData }) {
           >
             {bookmark.title ?? bookmark.url}
           </a>
-          {/* 수집한 설명은 외부 데이터이므로 텍스트로만 렌더링한다(React가 이스케이프). */}
-          {bookmark.description ? <p className="line-clamp-2 text-xs text-zinc-600 dark:text-zinc-400">{bookmark.description}</p> : null}
+          {/* 수집한 설명과 AI 요약은 외부 데이터에서 나온 값이므로 텍스트로만 렌더링한다(React가 이스케이프). */}
+          {summaryText ? <p className="text-xs text-zinc-700 dark:text-zinc-300">{summaryText}</p> : null}
+          {bookmark.tags.length > 0 ? (
+            <ul className="mt-1 flex flex-wrap gap-1" aria-label="태그">
+              {bookmark.tags.map((tag) => (
+                <li key={tag} className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                  {tag}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <p className="truncate text-xs text-zinc-500">
             {bookmark.host} · {bookmark.createdLabel}
-            {bookmark.collecting ? " · 정보 수집 중…" : ""}
+            {bookmark.collecting ? " · 수집·요약 중…" : ""}
           </p>
         </div>
         <form action={deleteAction}>

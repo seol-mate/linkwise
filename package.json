@@ -16,6 +16,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
     "@auth/drizzle-adapter": "^1.11.3",
     "@neondatabase/serverless": "^1.2.1",
     "cheerio": "^1.2.0",

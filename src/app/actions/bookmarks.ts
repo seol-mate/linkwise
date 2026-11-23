@@ -5,8 +5,9 @@ import { after } from "next/server";
 
 import type { ActionState } from "@/lib/action-state";
 import { addBookmarkSchema, bookmarkIdSchema, updateTitleSchema } from "@/lib/bookmark-schemas";
-import { createBookmark, deleteBookmark, resetFailedBookmark, updateBookmarkTitle } from "@/lib/bookmarks";
+import { countBookmarksSince, createBookmark, deleteBookmark, resetFailedBookmark, updateBookmarkTitle } from "@/lib/bookmarks";
 import { collectBookmark } from "@/lib/collect";
+import { DAY_MS, dailyBookmarkLimit, isOverDailyLimit } from "@/lib/limits";
 import { requireUser } from "@/lib/session";
 import { normalizeUrl } from "@/lib/url";
 
@@ -50,6 +51,17 @@ export async function addBookmarkAction(_prev: ActionState, formData: FormData):
   const normalized = normalizeUrl(parsed.data.url);
   if (!normalized.ok) {
     return fail(normalized.error);
+  }
+
+  // 저장마다 외부 fetch와 AI 호출 비용이 들므로 일일 한도를 확인한다.
+  try {
+    const usedToday = await countBookmarksSince(user.id, new Date(Date.now() - DAY_MS));
+    if (isOverDailyLimit(usedToday, user.email)) {
+      return fail(`하루에 저장할 수 있는 링크 수(${dailyBookmarkLimit(user.email)}개)를 넘었습니다. 내일 다시 시도해 주세요.`);
+    }
+  } catch (error) {
+    logFailure("일일 저장 한도 확인에 실패했습니다.", error);
+    return fail(GENERIC_ERROR);
   }
 
   let bookmarkId: string;

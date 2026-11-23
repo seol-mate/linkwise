@@ -34,10 +34,12 @@ function toItemData(bookmark: BookmarkListItem): BookmarkItemData {
     url: bookmark.url,
     title: bookmark.title,
     description: bookmark.description,
+    summary: bookmark.summary,
+    tags: bookmark.tags,
     status: bookmark.status,
     errorMessage: bookmark.errorMessage,
-    // 아직 아무 정보도 수집되지 않은 pending 북마크
-    collecting: bookmark.status === "pending" && !bookmark.title && !bookmark.description,
+    // 수집·요약이 끝나기 전(pending)이면 진행 중으로 본다.
+    collecting: bookmark.status === "pending",
     host: getHost(bookmark.url),
     createdLabel: dateFormatter.format(bookmark.createdAt),
   };
