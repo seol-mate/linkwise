@@ -7,6 +7,7 @@ import { listBookmarks } from "@/lib/bookmarks";
 import type { BookmarkListItem } from "@/lib/bookmarks";
 import { requireUser } from "@/lib/session";
 
+import { AutoRefresh } from "./auto-refresh";
 import { BookmarkForm } from "./bookmark-form";
 import { BookmarkItem } from "./bookmark-item";
 import type { BookmarkItemData } from "./bookmark-item";
@@ -32,6 +33,11 @@ function toItemData(bookmark: BookmarkListItem): BookmarkItemData {
     id: bookmark.id,
     url: bookmark.url,
     title: bookmark.title,
+    description: bookmark.description,
+    status: bookmark.status,
+    errorMessage: bookmark.errorMessage,
+    // 아직 아무 정보도 수집되지 않은 pending 북마크
+    collecting: bookmark.status === "pending" && !bookmark.title && !bookmark.description,
     host: getHost(bookmark.url),
     createdLabel: dateFormatter.format(bookmark.createdAt),
   };
@@ -64,6 +70,8 @@ async function BookmarksContent() {
     );
   }
 
+  const itemData = items.map(toItemData);
+
   return (
     <>
       <header className="flex items-center justify-between">
@@ -82,7 +90,8 @@ async function BookmarksContent() {
 
       <BookmarkForm />
 
-      <BookmarkList items={items.map(toItemData)} />
+      <BookmarkList items={itemData} />
+      <AutoRefresh watchKey={itemData.filter((item) => item.collecting).map((item) => item.id).join(",")} />
     </>
   );
 }

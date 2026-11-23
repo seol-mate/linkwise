@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { bookmarks } from "@/db/schema";
@@ -12,6 +12,9 @@ export type BookmarkListItem = {
   id: string;
   url: string;
   title: string | null;
+  description: string | null;
+  status: "pending" | "done" | "failed";
+  errorMessage: string | null;
   createdAt: Date;
 };
 
@@ -23,6 +26,9 @@ export async function listBookmarks(userId: string): Promise<BookmarkListItem[]>
       id: bookmarks.id,
       url: bookmarks.url,
       title: bookmarks.title,
+      description: bookmarks.description,
+      status: bookmarks.status,
+      errorMessage: bookmarks.errorMessage,
       createdAt: bookmarks.createdAt,
     })
     .from(bookmarks)
@@ -39,6 +45,47 @@ export async function createBookmark(userId: string, url: string, normalizedUrl:
     .onConflictDoNothing({ target: [bookmarks.userId, bookmarks.normalizedUrl] })
     .returning({ id: bookmarks.id });
   return row ?? null;
+}
+
+// 수집한 메타데이터를 저장한다. 사용자가 이미 정한 제목은 덮어쓰지 않는다.
+// 요약/태깅이 아직 남아 있으므로 status는 pending으로 둔다(done은 그 단계에서 설정).
+export async function saveCollectedMetadata(
+  userId: string,
+  id: string,
+  metadata: { title: string | null; description: string | null },
+): Promise<boolean> {
+  const rows = await db
+    .update(bookmarks)
+    .set({
+      title: sql`coalesce(${bookmarks.title}, ${metadata.title})`,
+      description: metadata.description,
+      errorMessage: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(bookmarks.id, id), eq(bookmarks.userId, userId)))
+    .returning({ id: bookmarks.id });
+  return rows.length > 0;
+}
+
+// message에는 사용자에게 보여줘도 되는 고정 문구만 넣는다(내부 주소·에러 원문 금지).
+export async function markCollectionFailed(userId: string, id: string, message: string): Promise<boolean> {
+  const rows = await db
+    .update(bookmarks)
+    .set({ status: "failed", errorMessage: message, updatedAt: new Date() })
+    .where(and(eq(bookmarks.id, id), eq(bookmarks.userId, userId)))
+    .returning({ id: bookmarks.id });
+  return rows.length > 0;
+}
+
+// 실패한 수집을 다시 시도하기 위해 pending으로 되돌리고 URL을 돌려준다.
+// failed 상태가 아니거나 다른 사용자의 북마크면 null.
+export async function resetFailedBookmark(userId: string, id: string): Promise<string | null> {
+  const [row] = await db
+    .update(bookmarks)
+    .set({ status: "pending", errorMessage: null, updatedAt: new Date() })
+    .where(and(eq(bookmarks.id, id), eq(bookmarks.userId, userId), eq(bookmarks.status, "failed")))
+    .returning({ url: bookmarks.url });
+  return row?.url ?? null;
 }
 
 // 대상이 없거나 다른 사용자의 북마크면 false를 반환한다.
