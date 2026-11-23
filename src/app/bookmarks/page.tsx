@@ -3,8 +3,10 @@ import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
 import { signOutAction } from "@/app/actions/auth";
-import { listBookmarks } from "@/lib/bookmarks";
-import type { BookmarkListItem } from "@/lib/bookmarks";
+import { listBookmarks, listTagCounts } from "@/lib/bookmarks";
+import type { BookmarkListItem, TagCount } from "@/lib/bookmarks";
+import { MAX_QUERY_LENGTH, buildBookmarksHref, hasActiveFilter, parseBookmarkFilters } from "@/lib/search";
+import type { BookmarkFilters } from "@/lib/search";
 import { requireUser } from "@/lib/session";
 
 import { AutoRefresh } from "./auto-refresh";
@@ -45,22 +47,27 @@ function toItemData(bookmark: BookmarkListItem): BookmarkItemData {
   };
 }
 
-export default function BookmarksPage() {
+type SearchParams = Promise<{ q?: string | string[]; tag?: string | string[] }>;
+
+export default function BookmarksPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 p-6">
       <Suspense fallback={<p className="text-sm text-zinc-500">불러오는 중…</p>}>
-        <BookmarksContent />
+        <BookmarksContent searchParams={searchParams} />
       </Suspense>
     </main>
   );
 }
 
-async function BookmarksContent() {
+async function BookmarksContent({ searchParams }: { searchParams: SearchParams }) {
   const user = await requireUser();
+  // URL 쿼리는 사용자가 바꿀 수 있는 입력이므로 검증·정리한 값만 사용한다.
+  const filters = parseBookmarkFilters(await searchParams);
 
   let items: BookmarkListItem[];
+  let tagCounts: TagCount[];
   try {
-    items = await listBookmarks(user.id);
+    [items, tagCounts] = await Promise.all([listBookmarks(user.id, filters), listTagCounts(user.id)]);
   } catch (error) {
     // Next의 동적 렌더링 신호는 삼키지 않고 다시 던진다.
     unstable_rethrow(error);
@@ -92,22 +99,102 @@ async function BookmarksContent() {
 
       <BookmarkForm />
 
-      <BookmarkList items={itemData} />
+      <SearchBar filters={filters} />
+      <TagFilter tags={tagCounts} filters={filters} />
+
+      <BookmarkList items={itemData} filters={filters} />
       <AutoRefresh watchKey={itemData.filter((item) => item.collecting).map((item) => item.id).join(",")} />
     </>
   );
 }
 
-function BookmarkList({ items }: { items: BookmarkItemData[] }) {
+// GET 폼이라 JS 없이 동작하고, 검색 상태가 URL에 남는다. 태그 필터는 hidden 값으로 유지한다.
+function SearchBar({ filters }: { filters: BookmarkFilters }) {
+  return (
+    <form action="/bookmarks" method="get" role="search" className="flex gap-2">
+      {filters.tag !== undefined ? <input type="hidden" name="tag" value={filters.tag} /> : null}
+      <input
+        type="search"
+        name="q"
+        defaultValue={filters.q ?? ""}
+        maxLength={MAX_QUERY_LENGTH}
+        placeholder="제목, 요약, 태그, 주소로 검색"
+        aria-label="북마크 검색"
+        className="min-w-0 flex-1 rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+      />
+      <button
+        type="submit"
+        className="shrink-0 rounded-md border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+      >
+        검색
+      </button>
+    </form>
+  );
+}
+
+function TagFilter({ tags, filters }: { tags: TagCount[]; filters: BookmarkFilters }) {
+  if (tags.length === 0) {
+    return null;
+  }
+
+  return (
+    <nav aria-label="태그 필터">
+      <ul className="flex flex-wrap gap-1.5">
+        {tags.map((tag) => {
+          const active = filters.tag === tag.name;
+          // 선택된 태그를 다시 누르면 태그 필터만 해제한다(검색어는 유지).
+          const href = buildBookmarksHref({ q: filters.q, tag: active ? undefined : tag.name });
+          const style = active
+            ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+            : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700";
+          return (
+            <li key={tag.name}>
+              <Link
+                href={href}
+                prefetch={false}
+                aria-current={active ? "true" : undefined}
+                className={`inline-block rounded-full px-2.5 py-0.5 text-xs ${style}`}
+              >
+                {tag.name} <span className="opacity-60">{tag.count}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+function BookmarkList({ items, filters }: { items: BookmarkItemData[]; filters: BookmarkFilters }) {
+  if (items.length === 0 && hasActiveFilter(filters)) {
+    return (
+      <p className="text-sm text-zinc-500">
+        조건에 맞는 북마크가 없습니다.{" "}
+        <Link href="/bookmarks" className="underline underline-offset-4">
+          필터 초기화
+        </Link>
+      </p>
+    );
+  }
   if (items.length === 0) {
     return <p className="text-sm text-zinc-500">아직 저장한 링크가 없습니다. 위에 주소를 붙여넣어 첫 링크를 저장해 보세요.</p>;
   }
 
   return (
-    <ul className="flex flex-col gap-2">
-      {items.map((item) => (
-        <BookmarkItem key={item.id} bookmark={item} />
-      ))}
-    </ul>
+    <section className="flex flex-col gap-2">
+      {hasActiveFilter(filters) ? (
+        <p className="text-xs text-zinc-500">
+          검색 결과 {items.length}개 ·{" "}
+          <Link href="/bookmarks" className="underline underline-offset-4">
+            필터 초기화
+          </Link>
+        </p>
+      ) : null}
+      <ul className="flex flex-col gap-2">
+        {items.map((item) => (
+          <BookmarkItem key={item.id} bookmark={item} />
+        ))}
+      </ul>
+    </section>
   );
 }

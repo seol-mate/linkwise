@@ -1,9 +1,12 @@
 import "server-only";
 
-import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, gte, ilike, inArray, or, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 
 import { db } from "@/db";
 import { bookmarkTags, bookmarks, tags } from "@/db/schema";
+import { escapeLikePattern } from "@/lib/search";
+import type { BookmarkFilters } from "@/lib/search";
 
 // 이 모듈의 모든 함수는 userId로 범위를 제한한다.
 // 호출하는 쪽은 반드시 세션에서 얻은 userId를 넘겨야 하며, 클라이언트가 보낸 값을 쓰지 않는다.
@@ -22,7 +25,46 @@ export type BookmarkListItem = {
 
 const LIST_LIMIT = 200;
 
-export async function listBookmarks(userId: string): Promise<BookmarkListItem[]> {
+// 이 북마크에 연결된 태그 중 조건에 맞는 것이 있는지 확인하는 서브쿼리.
+// tags.userId 조건을 항상 포함해 다른 사용자의 태그와 섞이지 않게 한다.
+function hasTag(userId: string, tagCondition: SQL | undefined): SQL {
+  return exists(
+    db
+      .select({ one: sql`1` })
+      .from(bookmarkTags)
+      .innerJoin(tags, eq(tags.id, bookmarkTags.tagId))
+      .where(and(eq(bookmarkTags.bookmarkId, bookmarks.id), eq(tags.userId, userId), tagCondition)),
+  );
+}
+
+// 항상 userId 조건으로 시작하고, 검색어(q)·태그(tag) 조건을 AND로 더한다.
+// 검색어는 제목·설명·요약·URL·태그명에서 대소문자 구분 없이 부분 일치로 찾으며,
+// 값은 바인딩 파라미터로 전달하고 LIKE 와일드카드는 이스케이프한다.
+function buildListConditions(userId: string, filters: BookmarkFilters): SQL[] {
+  const conditions: SQL[] = [eq(bookmarks.userId, userId)];
+
+  if (filters.q !== undefined) {
+    const pattern = `%${escapeLikePattern(filters.q)}%`;
+    const matches = or(
+      ilike(bookmarks.title, pattern),
+      ilike(bookmarks.description, pattern),
+      ilike(bookmarks.summary, pattern),
+      ilike(bookmarks.url, pattern),
+      hasTag(userId, ilike(tags.name, pattern)),
+    );
+    if (matches) {
+      conditions.push(matches);
+    }
+  }
+
+  if (filters.tag !== undefined) {
+    conditions.push(hasTag(userId, eq(tags.name, filters.tag)));
+  }
+
+  return conditions;
+}
+
+export async function listBookmarks(userId: string, filters: BookmarkFilters = {}): Promise<BookmarkListItem[]> {
   const rows = await db
     .select({
       id: bookmarks.id,
@@ -35,7 +77,7 @@ export async function listBookmarks(userId: string): Promise<BookmarkListItem[]>
       createdAt: bookmarks.createdAt,
     })
     .from(bookmarks)
-    .where(eq(bookmarks.userId, userId))
+    .where(and(...buildListConditions(userId, filters)))
     .orderBy(desc(bookmarks.createdAt))
     .limit(LIST_LIMIT);
 
@@ -66,6 +108,23 @@ export async function listBookmarks(userId: string): Promise<BookmarkListItem[]>
   }
 
   return rows.map((row) => ({ ...row, tags: (tagsByBookmark.get(row.id) ?? []).sort() }));
+}
+
+export type TagCount = { name: string; count: number };
+
+const TAG_LIST_LIMIT = 30;
+
+// 필터 UI에 보여줄 태그 목록: 북마크에 실제로 연결된 태그만, 많이 쓴 순서(같으면 이름순)
+export async function listTagCounts(userId: string): Promise<TagCount[]> {
+  const rows = await db
+    .select({ name: tags.name, total: count() })
+    .from(tags)
+    .innerJoin(bookmarkTags, eq(bookmarkTags.tagId, tags.id))
+    .where(eq(tags.userId, userId))
+    .groupBy(tags.id, tags.name)
+    .orderBy(desc(count()), asc(tags.name))
+    .limit(TAG_LIST_LIMIT);
+  return rows.map((row) => ({ name: row.name, count: row.total }));
 }
 
 // since 이후에 만든 북마크 수 (일일 저장 한도 확인용)
