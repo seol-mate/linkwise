@@ -1,4 +1,15 @@
-import { index, pgEnum, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import type { AdapterAccountType } from "@auth/core/adapters";
+import {
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 // 요약/태깅 처리 상태: 저장은 즉시, AI 처리는 비동기로 진행한다.
 export const bookmarkStatus = pgEnum("bookmark_status", ["pending", "done", "failed"]);
@@ -6,10 +17,33 @@ export const bookmarkStatus = pgEnum("bookmark_status", ["pending", "done", "fai
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
+  // Auth.js 어댑터가 요구하는 컬럼 (OAuth 로그인에서는 사용하지 않지만 타입상 필요)
+  emailVerified: timestamp("email_verified", { withTimezone: true }),
   name: text("name"),
   image: text("image"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// OAuth 제공자 연동 정보 (Auth.js 어댑터용). 세션은 JWT라서 sessions 테이블은 두지 않는다.
+export const accounts = pgTable(
+  "accounts",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").$type<AdapterAccountType>().notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("provider_account_id").notNull(),
+    refresh_token: text("refresh_token"),
+    access_token: text("access_token"),
+    expires_at: integer("expires_at"),
+    token_type: text("token_type"),
+    scope: text("scope"),
+    id_token: text("id_token"),
+    session_state: text("session_state"),
+  },
+  (t) => [primaryKey({ columns: [t.provider, t.providerAccountId] })],
+);
 
 export const bookmarks = pgTable(
   "bookmarks",
