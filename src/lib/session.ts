@@ -3,6 +3,8 @@ import "server-only";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { auth } from "@/auth";
+import { isGuestEmail } from "@/lib/guest";
+import { userExists } from "@/lib/users";
 
 export type CurrentUser = {
   id: string;
@@ -19,6 +21,13 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       return null;
     }
     const { id, name, email, image } = session.user;
+
+    // 게스트는 보관 기간이 지나면 삭제되지만 JWT 쿠키는 남아 있을 수 있다.
+    // 삭제된 게스트의 세션은 로그아웃 상태로 취급한다. (일반 사용자는 추가 조회 없음)
+    if (isGuestEmail(email) && !(await userExists(id))) {
+      return null;
+    }
+
     return { id, name: name ?? null, email: email ?? null, image: image ?? null };
   } catch (error) {
     // cookies() 접근 시 Next가 던지는 동적 렌더링 신호를 삼키지 않도록 다시 던진다.

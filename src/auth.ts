@@ -5,7 +5,8 @@ import GitHub from "next-auth/providers/github";
 
 import { db } from "@/db";
 import { accounts, users } from "@/db/schema";
-import { GUEST_NAME, createGuestEmail } from "@/lib/guest";
+import { GUEST_NAME, createGuestEmail, guestCutoff } from "@/lib/guest";
+import { deleteStaleGuests } from "@/lib/users";
 
 // AUTH_SECRET, AUTH_GITHUB_ID, AUTH_GITHUB_SECRET 환경 변수는 Auth.js가 자동으로 읽는다.
 // 이후 게스트 데모(Credentials)가 DB 세션과 함께 쓸 수 없어서 세션은 JWT 방식으로 둔다.
@@ -24,6 +25,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       name: "Guest",
       credentials: {},
       async authorize() {
+        // 오래된 게스트를 먼저 정리한다. 정리에 실패해도 로그인은 막지 않는다.
+        try {
+          await deleteStaleGuests(guestCutoff());
+        } catch (error) {
+          console.error("오래된 게스트 정리에 실패했습니다.", error instanceof Error ? error.name : "UnknownError");
+        }
+
         try {
           const [guest] = await db
             .insert(users)

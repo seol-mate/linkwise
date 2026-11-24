@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 import { signInAsGuest, signInWithGitHub } from "@/app/actions/auth";
+import { GUEST_RETENTION_DAYS } from "@/lib/guest";
 import { getCurrentUser } from "@/lib/session";
 
 type SearchParams = Promise<{ error?: string | string[] }>;
@@ -48,7 +49,9 @@ async function LoginForm({ searchParams }: { searchParams: SearchParams }) {
           게스트로 체험하기
         </button>
       </form>
-      <p className="text-xs text-zinc-500">게스트 데이터는 로그아웃 후 다시 접근할 수 없으며 정리될 수 있습니다.</p>
+      <p className="text-xs text-zinc-500">
+        게스트 데이터는 로그아웃 후 다시 접근할 수 없으며, {GUEST_RETENTION_DAYS}일 후 삭제됩니다.
+      </p>
     </div>
   );
 }
