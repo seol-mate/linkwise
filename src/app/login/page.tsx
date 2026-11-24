@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
-import { signInAsGuest, signInWithGitHub } from "@/app/actions/auth";
+import { signInAsGuest, signInWithGitHub, signInWithGoogle } from "@/app/actions/auth";
+import { GitHubIcon } from "@/components/icons/github-icon";
+import { GoogleIcon } from "@/components/icons/google-icon";
 import { GUEST_RETENTION_DAYS } from "@/lib/guest";
 import { getCurrentUser } from "@/lib/session";
 
@@ -36,9 +38,21 @@ async function LoginForm({ searchParams }: { searchParams: SearchParams }) {
       <form action={signInWithGitHub}>
         <button
           type="submit"
-          className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          className="flex w-full items-center justify-center gap-2 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >
+          {/* 라이트: 검정 배경 + 흰색 로고, 다크: 흰 배경 + 검정 로고 */}
+          <GitHubIcon variant="white" className="size-4 dark:hidden" />
+          <GitHubIcon variant="black" className="hidden size-4 dark:block" />
           GitHub로 계속하기
+        </button>
+      </form>
+      <form action={signInWithGoogle}>
+        <button
+          type="submit"
+          className="flex w-full items-center justify-center gap-2 rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+        >
+          <GoogleIcon className="size-4" />
+          Google로 계속하기
         </button>
       </form>
       <form action={signInAsGuest}>

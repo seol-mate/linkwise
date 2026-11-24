@@ -7,6 +7,10 @@ export async function signInWithGitHub() {
   await signIn("github", { redirectTo: "/bookmarks" });
 }
 
+export async function signInWithGoogle() {
+  await signIn("google", { redirectTo: "/bookmarks" });
+}
+
 export async function signInAsGuest() {
   await signIn("guest", { redirectTo: "/bookmarks" });
 }

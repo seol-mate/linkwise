@@ -19,7 +19,7 @@ npm run dev
 
 - [x] 프로젝트 초기 세팅, DB 스키마
 - [x] 인증 (GitHub, 게스트 데모)
-- [ ] Google 로그인
+- [x] Google 로그인
 - [x] 북마크 CRUD
 - [x] 메타데이터/본문 수집 (SSRF 방어)
 - [ ] AI 요약/태깅 (비동기 처리)
