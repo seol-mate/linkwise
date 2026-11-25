@@ -19,7 +19,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   providers: [
     GitHub,
-    Google,
+    // Google은 이메일 소유를 검증하므로, 같은 이메일의 기존 계정(예: GitHub)에 자동으로 연결한다.
+    // 이메일을 검증하지 않을 수 있는 provider에는 이 옵션을 켜지 않는다.
+    Google({ allowDangerousEmailAccountLinking: true }),
     // 게스트 데모: 입력값 없이 방문마다 새 게스트 사용자를 만든다.
     // Credentials는 어댑터의 createUser를 거치지 않으므로 여기서 직접 저장한다.
     Credentials({
