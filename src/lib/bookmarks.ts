@@ -1,12 +1,13 @@
 import "server-only";
 
-import { and, asc, count, desc, eq, exists, gte, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, gte, ilike, inArray, lt, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 
 import { db } from "@/db";
 import { bookmarkTags, bookmarks, tags } from "@/db/schema";
 import { escapeLikePattern } from "@/lib/search";
 import type { BookmarkFilters } from "@/lib/search";
+import { STALE_PENDING_MESSAGE } from "@/lib/stale";
 
 // 이 모듈의 모든 함수는 userId로 범위를 제한한다.
 // 호출하는 쪽은 반드시 세션에서 얻은 userId를 넘겨야 하며, 클라이언트가 보낸 값을 쓰지 않는다.
@@ -237,6 +238,18 @@ export async function resetFailedBookmark(userId: string, id: string): Promise<s
     .where(and(eq(bookmarks.id, id), eq(bookmarks.userId, userId), eq(bookmarks.status, "failed")))
     .returning({ url: bookmarks.url });
   return row?.url ?? null;
+}
+
+// cutoff 이후 갱신되지 않은 pending 북마크를 실패로 바꾸고, 바꾼 수를 돌려준다.
+// 수집이 도중에 끊기면 pending으로 남아 재시도(failed 전용)도 할 수 없으므로, 목록을 불러올 때 정리한다.
+// 늦게 끝난 원래 작업이 saveSummary로 done을 덮어쓸 수 있으며, 그 경우에도 정상 상태로 복구된다.
+export async function failStalePendingBookmarks(userId: string, cutoff: Date): Promise<number> {
+  const rows = await db
+    .update(bookmarks)
+    .set({ status: "failed", errorMessage: STALE_PENDING_MESSAGE, updatedAt: new Date() })
+    .where(and(eq(bookmarks.userId, userId), eq(bookmarks.status, "pending"), lt(bookmarks.updatedAt, cutoff)))
+    .returning({ id: bookmarks.id });
+  return rows.length;
 }
 
 // 대상이 없거나 다른 사용자의 북마크면 false를 반환한다.

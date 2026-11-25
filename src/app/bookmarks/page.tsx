@@ -3,11 +3,12 @@ import { unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
 
 import { signOutAction } from "@/app/actions/auth";
-import { listBookmarks, listTagCounts } from "@/lib/bookmarks";
+import { failStalePendingBookmarks, listBookmarks, listTagCounts } from "@/lib/bookmarks";
 import type { BookmarkListItem, TagCount } from "@/lib/bookmarks";
 import { MAX_QUERY_LENGTH, buildBookmarksHref, hasActiveFilter, parseBookmarkFilters } from "@/lib/search";
 import type { BookmarkFilters } from "@/lib/search";
 import { requireUser } from "@/lib/session";
+import { stalePendingCutoff } from "@/lib/stale";
 
 import { AutoRefresh } from "./auto-refresh";
 import { BookmarkForm } from "./bookmark-form";
@@ -64,6 +65,14 @@ async function BookmarksContent({ searchParams }: { searchParams: SearchParams }
   // URL 쿼리는 사용자가 바꿀 수 있는 입력이므로 검증·정리한 값만 사용한다.
   const filters = parseBookmarkFilters(await searchParams);
 
+  // 수집이 중간에 끊겨 pending으로 남은 북마크를 실패로 바꿔 다시 시도할 수 있게 한다. 실패해도 목록 표시는 막지 않는다.
+  try {
+    await failStalePendingBookmarks(user.id, stalePendingCutoff());
+  } catch (error) {
+    unstable_rethrow(error);
+    console.error("중단된 수집 정리에 실패했습니다.", error instanceof Error ? error.name : "UnknownError");
+  }
+
   let items: BookmarkListItem[];
   let tagCounts: TagCount[];
   try {
@@ -103,7 +112,12 @@ async function BookmarksContent({ searchParams }: { searchParams: SearchParams }
       <TagFilter tags={tagCounts} filters={filters} />
 
       <BookmarkList items={itemData} filters={filters} />
-      <AutoRefresh watchKey={itemData.filter((item) => item.collecting).map((item) => item.id).join(",")} />
+      <AutoRefresh
+        watchKey={itemData
+          .filter((item) => item.collecting)
+          .map((item) => item.id)
+          .join(",")}
+      />
     </>
   );
 }
