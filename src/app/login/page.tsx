@@ -5,6 +5,7 @@ import { signInAsGuest, signInWithGitHub, signInWithGoogle } from "@/app/actions
 import { GitHubIcon } from "@/components/icons/github-icon";
 import { GoogleIcon } from "@/components/icons/google-icon";
 import { GUEST_RETENTION_DAYS } from "@/lib/guest";
+import { loginErrorMessage } from "@/lib/login-error";
 import { getCurrentUser } from "@/lib/session";
 
 type SearchParams = Promise<{ error?: string | string[] }>;
@@ -27,12 +28,13 @@ async function LoginForm({ searchParams }: { searchParams: SearchParams }) {
   }
 
   const { error } = await searchParams;
+  const errorMessage = loginErrorMessage(error);
 
   return (
     <div className="flex w-full flex-col gap-3">
-      {error ? (
+      {errorMessage ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          로그인에 실패했습니다. 잠시 후 다시 시도해 주세요.
+          {errorMessage}
         </p>
       ) : null}
       <form action={signInWithGitHub}>
@@ -63,9 +65,7 @@ async function LoginForm({ searchParams }: { searchParams: SearchParams }) {
           게스트로 체험하기
         </button>
       </form>
-      <p className="text-xs text-zinc-500">
-        게스트 데이터는 로그아웃 후 다시 접근할 수 없으며, {GUEST_RETENTION_DAYS}일 후 삭제됩니다.
-      </p>
+      <p className="text-xs text-zinc-500">게스트 데이터는 로그아웃 후 다시 접근할 수 없으며, {GUEST_RETENTION_DAYS}일 후 삭제됩니다.</p>
     </div>
   );
 }
