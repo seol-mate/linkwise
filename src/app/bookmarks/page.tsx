@@ -17,7 +17,12 @@ import { BookmarkForm } from "./bookmark-form";
 import { BookmarkItem } from "./bookmark-item";
 import type { BookmarkItemData } from "./bookmark-item";
 
-const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
+// 이 페이지의 서버 액션은 응답 뒤 after()로 본문 수집과 AI 요약을 실행한다.
+// 최악의 경우 fetch 10초 + AI 60초 × 3회(재시도 2회) 정도라 여유를 두고 300초로 둔다.
+// Vercel Hobby 플랜의 최대값이 300초다(2026-11 문서 기준).
+export const maxDuration = 300;
+
+const dateFormatter =new Intl.DateTimeFormat("ko-KR", {
   year: "numeric",
   month: "long",
   day: "numeric",

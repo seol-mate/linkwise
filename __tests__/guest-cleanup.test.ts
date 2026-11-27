@@ -7,7 +7,12 @@ vi.mock("@/lib/users", () => ({
   deleteStaleGuests: (cutoff: Date, limit?: number) => deleteStaleGuests(cutoff, limit),
 }));
 
-import { GUEST_CLEANUP_INTERVAL_MS, cleanupStaleGuests, cleanupStaleGuestsThrottled } from "@/lib/guest-cleanup";
+import {
+  GUEST_CLEANUP_INTERVAL_MS,
+  cleanupAllStaleGuests,
+  cleanupStaleGuests,
+  cleanupStaleGuestsThrottled,
+} from "@/lib/guest-cleanup";
 import { guestCutoff } from "@/lib/guest";
 import { createIntervalGate } from "@/lib/interval-gate";
 
@@ -119,5 +124,58 @@ describe("cleanupStaleGuestsThrottled", () => {
 
   it("간격은 1시간이다", () => {
     expect(GUEST_CLEANUP_INTERVAL_MS).toBe(60 * 60 * 1000);
+  });
+});
+
+describe("cleanupAllStaleGuests", () => {
+  beforeEach(() => {
+    deleteStaleGuests.mockReset();
+  });
+
+  it("배치가 가득 차면 계속 지우고, 덜 차면 멈춘다", async () => {
+    deleteStaleGuests.mockResolvedValueOnce(10).mockResolvedValueOnce(10).mockResolvedValueOnce(3);
+
+    await expect(cleanupAllStaleGuests(new Date(), 10, 50)).resolves.toBe(23);
+    expect(deleteStaleGuests).toHaveBeenCalledTimes(3);
+  });
+
+  it("대상이 없으면 한 번만 조회한다", async () => {
+    deleteStaleGuests.mockResolvedValue(0);
+
+    await expect(cleanupAllStaleGuests(new Date(), 10, 50)).resolves.toBe(0);
+    expect(deleteStaleGuests).toHaveBeenCalledTimes(1);
+  });
+
+  it("maxBatches를 넘겨 반복하지 않는다", async () => {
+    deleteStaleGuests.mockResolvedValue(10);
+
+    await expect(cleanupAllStaleGuests(new Date(), 10, 4)).resolves.toBe(40);
+    expect(deleteStaleGuests).toHaveBeenCalledTimes(4);
+  });
+
+  it("모든 배치에 같은 기준 시각과 배치 크기를 넘긴다", async () => {
+    deleteStaleGuests.mockResolvedValueOnce(10).mockResolvedValueOnce(0);
+    const now = new Date("2026-11-27T00:00:00Z");
+
+    await cleanupAllStaleGuests(now, 10, 50);
+
+    expect(deleteStaleGuests.mock.calls).toEqual([
+      [guestCutoff(now), 10],
+      [guestCutoff(now), 10],
+    ]);
+  });
+
+  it("삭제가 실패하면 그대로 던진다", async () => {
+    deleteStaleGuests.mockRejectedValue(new Error("db down"));
+
+    await expect(cleanupAllStaleGuests(new Date(), 10, 50)).rejects.toThrow("db down");
+  });
+
+  it("기본 배치 크기는 100명이다", async () => {
+    deleteStaleGuests.mockResolvedValue(0);
+
+    await cleanupAllStaleGuests(new Date());
+
+    expect(deleteStaleGuests.mock.calls[0]?.[1]).toBe(100);
   });
 });
