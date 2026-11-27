@@ -12,7 +12,9 @@ export async function proxy(request: NextRequest) {
   }
 
   try {
-    const token = await getToken({ req: request, secret });
+    // Auth.js는 HTTPS에서 세션 쿠키 이름에 `__Secure-` 접두사를 붙인다. getToken은 이 값을 알려 주지 않으면
+    // 접두사 없는 쿠키만 찾아서, 배포 환경에서 로그인했는데도 /login ↔ /bookmarks 리다이렉트가 반복된다.
+    const token = await getToken({ req: request, secret, secureCookie: request.nextUrl.protocol === "https:" });
     if (token) {
       return NextResponse.next();
     }
