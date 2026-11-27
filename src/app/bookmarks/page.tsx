@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
+import { after } from "next/server";
 import { Suspense } from "react";
 
 import { signOutAction } from "@/app/actions/auth";
 import { failStalePendingBookmarks, listBookmarks, listTagCounts } from "@/lib/bookmarks";
 import type { BookmarkListItem, TagCount } from "@/lib/bookmarks";
+import { cleanupStaleGuestsThrottled } from "@/lib/guest-cleanup";
 import { MAX_QUERY_LENGTH, buildBookmarksHref, hasActiveFilter, parseBookmarkFilters } from "@/lib/search";
 import type { BookmarkFilters } from "@/lib/search";
 import { requireUser } from "@/lib/session";
@@ -72,6 +74,9 @@ async function BookmarksContent({ searchParams }: { searchParams: SearchParams }
     unstable_rethrow(error);
     console.error("중단된 수집 정리에 실패했습니다.", error instanceof Error ? error.name : "UnknownError");
   }
+
+  // 게스트 로그인이 없어도 만료된 게스트가 남지 않게 한다. 응답 뒤에 실행해 목록 표시를 늦추지 않는다.
+  after(() => cleanupStaleGuestsThrottled());
 
   let items: BookmarkListItem[];
   let tagCounts: TagCount[];

@@ -4,7 +4,7 @@ export const GUEST_EMAIL_DOMAIN = "guest.linkwise.invalid";
 export const GUEST_NAME = "게스트";
 export const GUEST_EMAIL_SUFFIX = `@${GUEST_EMAIL_DOMAIN}`;
 
-// 게스트 데이터를 보관하는 기간. 지나면 다음 게스트 로그인 시점에 삭제된다.
+// 게스트 데이터를 보관하는 기간. 지나면 다음 게스트 로그인이나 북마크 목록 조회 때 삭제된다(src/lib/guest-cleanup.ts).
 export const GUEST_RETENTION_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
