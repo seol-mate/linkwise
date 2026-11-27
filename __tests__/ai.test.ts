@@ -1,4 +1,3 @@
-// @vitest-environment node
 import Anthropic from "@anthropic-ai/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
